@@ -39,16 +39,29 @@ def get_spectra_params(file_path):
     print(f"Number of spectra: {len(params_dict.keys())}")
     return params_dict
 
+def filter_spectra(data_dict, params_dict, pattern):
+    # Use fnmatch to filter filenames directly
+    filtered_data = {k: v for k, v in data_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
+    filtered_params = {k: v for k, v in params_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
+    
+    print(f"Found {len(filtered_data)} files matching '{pattern}'")
+    return filtered_data, filtered_params
+
+def spectra_main(file_path, savgol_filter=True):
+    path_to_spectra = get_spectra(file_path)
+    data_dict = get_spectra_data(path_to_spectra)
+    params_dict = get_spectra_params(path_to_spectra)
+    return data_dict, params_dict
+
 
 if __name__ == "__main__":
 
     # EXAMPLE USAGE
-    path_to_spectra = get_spectra("./Data/Spectra/20250821 - sample13 - after")
-    data_dict = get_spectra_data(path_to_spectra)
-    params_dict = get_spectra_params(path_to_spectra)
+    data_dict, params_dict = spectra_main("./Data/Spectra/20250821 - sample13 - after")
 
-    for filename, data in data_dict.items():
-        print(f"Exposure: {params_dict[filename]['Exposure time (s)']}s")
+    filtered_data, filtered_params = filter_spectra(data_dict, params_dict, "*box1*")
+
+    for filename, data in filtered_data.items():
         plt.plot(data[:, 0], data[:, 1])
     plt.show()
 
