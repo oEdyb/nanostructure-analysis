@@ -82,15 +82,22 @@ def apd_load_main(file_path):
     
     for file in files:
         base_name = os.path.basename(file).replace("_transmission.npy", "")
-        apd_dict[base_name] = np.load(file)
-        monitor_dict[base_name] = np.load(file.replace("_transmission.npy", "_monitor.npy"))
+        # Split the name and take only the middle parts (remove first 2 and last 1)
+        name_parts = base_name.split('_')
+        key_name = '_'.join(name_parts[2:])
+        print(key_name)
         
-        # Load params
+        apd_dict[key_name] = np.load(file)
+        monitor_dict[key_name] = np.load(file.replace("_transmission.npy", "_monitor.npy"))
+        
+        # Load params and parse as dictionary
         params_file = file.replace("_transmission.npy", "_params.txt")
         with open(params_file, 'r') as f:
-            params_dict[base_name] = f.read()
+            params_text = f.read().strip()
+            # Convert the params text to a dictionary, IMPORTANT
+            params_dict[key_name] = ast.literal_eval(params_text)
     
-    return monitor_dict, apd_dict, params_dict
+    return apd_dict, monitor_dict, params_dict
 
 
 
