@@ -100,6 +100,16 @@ def apd_load_main(file_path):
     return apd_dict, monitor_dict, params_dict
 
 
+def filter_apd(apd_dict, monitor_dict, params_dict, pattern):
+    # Use fnmatch to filter filenames directly
+    filtered_data = {k: v for k, v in apd_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
+    filtered_monitor = {k: v for k, v in monitor_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
+    filtered_params = {k: v for k, v in params_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
+    
+    print(f"Found {len(filtered_data)} files matching '{pattern}'")
+    return filtered_data, filtered_monitor, filtered_params
+
+
 
 if __name__ == "__main__":
     # EXAMPLE USAGE
@@ -110,11 +120,12 @@ if __name__ == "__main__":
     apd_folder = os.path.join("APD", folder_name)
     
     if os.path.exists(apd_folder):
-        monitor_dict, apd_dict, params_dict = apd_load_main(path)
+        apd_dict, monitor_dict, params_dict = apd_load_main(path)
+        apd_dict, monitor_dict, params_dict = filter_apd(apd_dict, monitor_dict, params_dict, "*box1*")
         print(f"Loaded {len(apd_dict)} datasets successfully!")
     else:
         apd_main(path, factor=100)
-        monitor_dict, apd_dict, params_dict = apd_load_main(path)
+        apd_dict, monitor_dict, params_dict = apd_load_main(path)
         print(f"Loaded {len(apd_dict)} datasets successfully!")
 
 
