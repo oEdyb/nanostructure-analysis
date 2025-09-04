@@ -19,14 +19,15 @@ def plot_apd(apd_data, monitor_data, apd_params, normalize=True, savgol=True, ti
     # Sort by power (ascending order)
     power_data.sort(key=lambda x: x[0])
     
-    # Plot in power order
-    for power_mw, key in power_data:
-        # Get original data
+    # Get colors from seismic colormap
+    colors = plt.cm.seismic(np.linspace(0.1, 0.9, len(power_data)))
+    
+    # Plot in power order with colors
+    for (power_mw, key), color in zip(power_data, colors):
         data = apd_data[key]
         duration = apd_params[key]['Duration (s)']
         time_axis = np.linspace(0, duration, len(data))
         
-        # Truncate data if time limit specified
         if time is not None:
             mask = time_axis <= time
             data = data[mask]
@@ -40,7 +41,7 @@ def plot_apd(apd_data, monitor_data, apd_params, normalize=True, savgol=True, ti
         if savgol:
             normalized_apd = savgol_filter(normalized_apd, 51, 3)
         
-        plt.plot(time_axis, normalized_apd, label=f"{key} - {power_mw:.0f} mW")
+        plt.plot(time_axis, normalized_apd, label=f"{key} - {power_mw:.0f} mW", color=color)
     
     plt.xlabel('Time (s)', fontsize=18, fontweight='bold')
     plt.ylabel('APD Signal', fontsize=18, fontweight='bold')
@@ -84,7 +85,7 @@ def plot_spectra(spectra_data, spectra_params):
         plt.plot(spectra_data[key][:, 0], spectra_data[key][:, 1], label=f"{key} - {time_str}")
         
     plt.xlabel('Wavelength (nm)', fontsize=18, fontweight='bold')
-    plt.ylabel('Transmittance', fontsize=18, fontweight='bold')
+    plt.ylabel('a.u.', fontsize=18, fontweight='bold')
     plt.title('Spectra Data', fontsize=22, fontweight='bold')
     plt.grid(True, alpha=0.7, linestyle='--')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=14)
