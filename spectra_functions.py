@@ -66,13 +66,52 @@ def get_spectra_params(file_path):
     print(f"Number of spectra: {len(params_dict.keys())}")
     return params_dict
 
-def filter_spectra(data_dict, params_dict, pattern):
+def filter_spectra(data_dict, params_dict, pattern, average=False, exclude=None):
     # Use fnmatch to filter filenames directly
+
     filtered_data = {k: v for k, v in data_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
     filtered_params = {k: v for k, v in params_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
+    print(filtered_data.keys())
+    if exclude:
+        for excl_pattern in exclude:
+            filtered_data = {k: v for k, v in filtered_data.items() if not glob.fnmatch.fnmatch(k, excl_pattern)}
+            filtered_params = {k: v for k, v in filtered_params.items() if not glob.fnmatch.fnmatch(k, excl_pattern)}
+    if not average:
+        print(f"Found {len(filtered_data)} files matching '{pattern}'")
+        return filtered_data, filtered_params
     
-    print(f"Found {len(filtered_data)} files matching '{pattern}'")
-    return filtered_data, filtered_params
+    # Group duplicate files by base name (remove _1, _2 etc suffixes)
+    groups = {}
+    for key in filtered_data.keys():
+        base_key = key.split('_')[:-1] if key.split('_')[-1].isdigit() else [key]
+        base_key = '_'.join(base_key) if base_key else key
+        groups.setdefault(base_key, []).append(key)
+    
+    # Average groups and filter cosmic rays
+    averaged_data, averaged_params = {}, {}
+    for base_key, keys in groups.items():
+        if len(keys) == 1:
+            # Single file, no averaging needed
+            averaged_data[base_key] = filtered_data[keys[0]]
+            averaged_params[base_key] = filtered_params[keys[0]]
+        else:
+            # Multiple files, average with cosmic ray filtering
+            spectra = np.array([filtered_data[k][:, 1] for k in keys])
+            wavelengths = filtered_data[keys[0]][:, 0]
+            
+            # Filter cosmic rays: use median if any point deviates >3 std from mean
+            mean_spectrum = np.mean(spectra, axis=0)
+            std_spectrum = np.std(spectra, axis=0)
+            filtered_spectrum = np.where(np.any(np.abs(spectra - mean_spectrum) > 2 * std_spectrum, axis=0),
+                                       np.median(spectra, axis=0), mean_spectrum)
+            
+            averaged_data[base_key] = np.column_stack((wavelengths, filtered_spectrum))
+            averaged_params[base_key] = filtered_params[keys[0]]  # Use first file's params
+    
+    print(f"Found {len(averaged_data)} averaged files matching '{pattern}'")
+    return averaged_data, averaged_params
+
+
 
 def spectra_main(file_path, savgol_filter=True):
     path_to_spectra = get_spectra(file_path)
@@ -81,7 +120,7 @@ def spectra_main(file_path, savgol_filter=True):
     return data_dict, params_dict
 
 
-def normalize_spectra(data_dict, bkg_data, ref_data, ref_bkg_data, savgol_before_bkg=False, savgol_after_div=True):
+def normalize_spectra(data_dict, bkg_data, ref_data, ref_bkg_data, savgol_before_bkg=False, savgol_after_div=True, savgol_after_div_window=31, savgol_after_div_order=2):
     normalized_data = {}
     for key_data in data_dict.keys():
         data = data_dict[key_data]
@@ -98,10 +137,9 @@ def normalize_spectra(data_dict, bkg_data, ref_data, ref_bkg_data, savgol_before
         
         # Apply savgol filter after normalization if requested
         if savgol_after_div:
-            normalized_data_y = savgol_filter(normalized_data_y, 31, 1)
+            normalized_data_y = savgol_filter(normalized_data_y, savgol_after_div_window, savgol_after_div_order)
             
         normalized_data[key_data] = np.column_stack((normalized_data_x, normalized_data_y))
-        print(normalized_data[key_data])
     return normalized_data
 
 if __name__ == "__main__":
