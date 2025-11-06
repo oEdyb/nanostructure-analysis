@@ -1,20 +1,19 @@
 import glob
 import os
+import re
 import numpy as np
 import ast
 import matplotlib.pyplot as plt
+import pickle
+import scipy.sparse as sparse
 from scipy.signal import savgol_filter
+from scipy.sparse.linalg import spsolve
 
 def get_spectra(file_path):
     # Get all spectra in the folder, assuming the spectra are in the format *_spectrum.dat
     spectrum_pattern = "*_spectrum.dat"
     path = os.path.join(file_path, spectrum_pattern)
     path_to_spectra = glob.glob(path)
-
-    # Print the files that match the pattern
-    print(f"\nFiles matching {spectrum_pattern}:")
-    for file in path_to_spectra:
-        print(f"{os.path.basename(file)}")
     return path_to_spectra
 
 def get_spectra_data(file_path):
@@ -33,8 +32,7 @@ def get_spectra_data(file_path):
             while f"{base_name}_{counter}" in data_dict:
                 counter += 1
             base_name = f"{base_name}_{counter}"
-        
-        print(base_name)
+
         data_dict[base_name] = data
     print(f"Number of spectra: {len(data_dict.keys())}")
     return data_dict
@@ -45,22 +43,35 @@ def get_spectra_params(file_path):
     for file in file_path:
         file = file.replace("_spectrum.dat", "_params.txt")
         # Read the dictionary from the text file and safely evaluate it, since it is in a dictionary format in my case
-        with open(file, 'r') as f:
-            params_text = f.read().strip()
-            params = ast.literal_eval(params_text) 
-            base_name = os.path.basename(file).replace("_params.txt", "")
-            # Split the name and take only the middle parts (remove first 2 parts)
-            name_parts = base_name.split('_')
-            base_name = '_'.join(name_parts[2:])
+        # Try different encodings to handle files with special characters
+        encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        params_text = None
+        
+        for encoding in encodings:
+            try:
+                with open(file, 'r', encoding=encoding) as f:
+                    params_text = f.read().strip()
+                break
+            except UnicodeDecodeError:
+                continue
+        
+        if params_text is None:
+            print(f"Warning: Could not decode file {file} with any encoding, skipping...")
+            continue
             
-            # Handle duplicate keys by adding suffix
-            if base_name in params_dict:
-                counter = 1
-                while f"{base_name}_{counter}" in params_dict:
-                    counter += 1
-                base_name = f"{base_name}_{counter}"
-            
-            print(base_name)
+        params = ast.literal_eval(params_text) 
+        base_name = os.path.basename(file).replace("_params.txt", "")
+        # Split the name and take only the middle parts (remove first 2 parts)
+        name_parts = base_name.split('_')
+        base_name = '_'.join(name_parts[2:])
+        
+        # Handle duplicate keys by adding suffix
+        if base_name in params_dict:
+            counter = 1
+            while f"{base_name}_{counter}" in params_dict:
+                counter += 1
+            base_name = f"{base_name}_{counter}"
+
         # Dictionary of dictionaries with the filename as the key
         params_dict[base_name] = params
     print(f"Number of spectra: {len(params_dict.keys())}")
@@ -71,7 +82,6 @@ def filter_spectra(data_dict, params_dict, pattern, average=False, exclude=None)
 
     filtered_data = {k: v for k, v in data_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
     filtered_params = {k: v for k, v in params_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
-    print(filtered_data.keys())
     if exclude:
         for excl_pattern in exclude:
             filtered_data = {k: v for k, v in filtered_data.items() if not glob.fnmatch.fnmatch(k, excl_pattern)}
@@ -112,6 +122,27 @@ def filter_spectra(data_dict, params_dict, pattern, average=False, exclude=None)
     return averaged_data, averaged_params
 
 
+def baseline_als(y, lam=1e6, p=0.5, niter=10):
+    """Asymmetric least-squares baseline, exposes lambda and asymmetry."""
+    y = np.asarray(y, dtype=float)
+    length = y.size
+    difference = sparse.csc_matrix(np.diff(np.eye(length), 2))
+    weights = np.ones(length)
+    for _ in range(niter):
+        weight_matrix = sparse.spdiags(weights, 0, length, length)
+        system = weight_matrix + lam * difference.dot(difference.transpose())
+        baseline = spsolve(system, weights * y)
+        weights = p * (y > baseline) + (1 - p) * (y < baseline)
+    return baseline
+
+
+def compute_sensitivity_stat(values, percentile=95):
+    """Return percentile of absolute sensitivity values."""
+    magnitude = np.abs(np.asarray(values, dtype=float))
+    if magnitude.size == 0:
+        return 0.0
+    return float(np.percentile(magnitude, percentile))
+
 
 def spectra_main(file_path, savgol_filter=True):
     path_to_spectra = get_spectra(file_path)
@@ -120,27 +151,120 @@ def spectra_main(file_path, savgol_filter=True):
     return data_dict, params_dict
 
 
-def normalize_spectra(data_dict, bkg_data, ref_data, ref_bkg_data, savgol_before_bkg=False, savgol_after_div=True, savgol_after_div_window=31, savgol_after_div_order=2):
+def load_spectra_cached(spectra_path):
+    """Load spectra data with caching to avoid long reload times"""
+    # Create cache directory
+    cache_dir = "cache"
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    # Create cache filename from path
+    cache_name = spectra_path.replace("/", "_").replace("\\", "_").replace(":", "").replace(" ", "_")
+    cache_file = os.path.join(cache_dir, f"spectra_{cache_name}.pkl")
+    
+    # Try loading from cache first
+    if os.path.exists(cache_file):
+        print(f"Loading from cache: {cache_file}")
+        try:
+            with open(cache_file, 'rb') as f:
+                return pickle.load(f)
+        except:
+            print("Cache corrupted, reloading...")
+    
+    # Load fresh data if no cache
+    print(f"Loading spectra from: {spectra_path}")
+    spectra_data, spectra_params = spectra_main(spectra_path)
+    
+    # Save to cache
+    print(f"Saving to cache: {cache_file}")
+    with open(cache_file, 'wb') as f:
+        pickle.dump((spectra_data, spectra_params), f)
+    
+    return spectra_data, spectra_params
+
+
+def normalize_spectra_bkg(data_dict, bkg_data, ref_data, ref_bkg_data, savgol_before_bkg=False, savgol_after_div=True, savgol_after_div_window=31, 
+    savgol_after_div_order=2, cut_off=950):
     normalized_data = {}
     for key_data in data_dict.keys():
-        data = data_dict[key_data]
+        # Create copies to avoid modifying original data
+        data = data_dict[key_data].copy()
+        bkg_copy = bkg_data.copy()
+        ref_copy = ref_data.copy()
+        ref_bkg_copy = ref_bkg_data.copy()
+        
         if savgol_before_bkg:
             # WARNING IT CANT HANDLE THE SHARP TRANSITIONS
-            data[:, 1] = savgol_filter(data[:, 1], 31, 3)
-            bkg_data[:, 1] = savgol_filter(bkg_data[:, 1], 31, 3)
-            ref_data[:, 1] = savgol_filter(ref_data[:, 1], 31, 3)
-            ref_bkg_data[:, 1] = savgol_filter(ref_bkg_data[:, 1], 31, 3)
+            data[:, 1] = savgol_filter(data[:, 1], 21, 4)
+            bkg_copy[:, 1] = savgol_filter(bkg_copy[:, 1], 21, 4)
+            ref_copy[:, 1] = savgol_filter(ref_copy[:, 1], 21, 4)
+            ref_bkg_copy[:, 1] = savgol_filter(ref_bkg_copy[:, 1], 21, 4)
         
         # Perform normalization calculation
-        normalized_data_y = (data[:, 1] - bkg_data[:, 1]) / (ref_data[:, 1] - ref_bkg_data[:, 1])
+        normalized_data_y = (data[:, 1] - bkg_copy[:, 1]) / (ref_copy[:, 1] - ref_bkg_copy[:, 1])
         normalized_data_x = data[:, 0]
         
         # Apply savgol filter after normalization if requested
         if savgol_after_div:
             normalized_data_y = savgol_filter(normalized_data_y, savgol_after_div_window, savgol_after_div_order)
+        
+        # Apply cutoff wavelength filter to remove data below cutoff
+        cutoff_mask = normalized_data_x <= cut_off
+        normalized_data_x = normalized_data_x[cutoff_mask]
+        normalized_data_y = normalized_data_y[cutoff_mask]
+        
+        # Normalize by value at 740 nm to scale spectrum
+        target_wavelength = 740
+        closest_idx = np.argmin(np.abs(normalized_data_x - target_wavelength))
+        norm_value = normalized_data_y[closest_idx]
+        if norm_value != 0:  # Avoid division by zero
+            normalized_data_y = normalized_data_y / norm_value
             
         normalized_data[key_data] = np.column_stack((normalized_data_x, normalized_data_y))
     return normalized_data
+
+
+
+
+def normalize_spectra(data_dict, ref_data, savgol_before_bkg=False, savgol_after_div=True, savgol_after_div_window=31, savgol_after_div_order=2, 
+    cut_off=950, target_wavelength=None):
+    normalized_data = {}
+    for key_data in data_dict.keys():
+        # Create copies to avoid modifying original data
+        data = data_dict[key_data].copy()
+        ref_copy = ref_data.copy()
+        
+        if savgol_before_bkg:
+            # WARNING IT CANT HANDLE THE SHARP TRANSITIONS
+            data[:, 1] = savgol_filter(data[:, 1], 21, 1)
+            ref_copy[:, 1] = savgol_filter(ref_copy[:, 1], 21, 1)
+        
+        # Perform normalization calculation
+        normalized_data_y = (data[:, 1]) / (ref_copy[:, 1])
+        normalized_data_x = data[:, 0]
+        
+        # Apply savgol filter after normalization if requested
+        if savgol_after_div:
+            normalized_data_y = savgol_filter(normalized_data_y, savgol_after_div_window, savgol_after_div_order)
+        
+        # Apply cutoff wavelength filter to remove data below cutoff
+        cutoff_mask = normalized_data_x <= cut_off
+        normalized_data_x = normalized_data_x[cutoff_mask]
+        normalized_data_y = normalized_data_y[cutoff_mask]
+        
+        # Normalize by value at 740 nm to scale spectrum
+        if target_wavelength is not None:
+            closest_idx = np.argmin(np.abs(normalized_data_x - target_wavelength))
+            norm_value = normalized_data_y[closest_idx]
+            if norm_value != 0:  # Avoid division by zero
+                normalized_data_y = normalized_data_y / norm_value
+        else:
+            norm_value = 1
+            normalized_data_y = normalized_data_y / norm_value
+            
+        normalized_data[key_data] = np.column_stack((normalized_data_x, normalized_data_y))
+    return normalized_data
+
+
 
 if __name__ == "__main__":
 
@@ -153,7 +277,7 @@ if __name__ == "__main__":
 
 
 
-    normalized_data = normalize_spectra(box1_data, bkg_data['bkg_10000ms_1'], um5_data['5um_100ms_z_locked_1'], bkg_data['bkg_100ms_3'])
+    normalized_data = normalize_spectra_bkg(box1_data, bkg_data['bkg_10000ms_1'], um5_data['5um_100ms_z_locked_1'], bkg_data['bkg_100ms_3'])
 
 
     for filename, data in normalized_data.items():
@@ -169,8 +293,6 @@ if __name__ == "__main__":
     for filename, data in bkg_data.items():
         plt.plot(data[:, 0], data[:, 1], label=filename)
     plt.legend()
-
-
 
 
 

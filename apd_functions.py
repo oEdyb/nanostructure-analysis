@@ -66,7 +66,7 @@ def apd_main(file_path, factor=100):
     get_apd_data(path_to_apd, factor=factor)
     return
 
-def apd_load_main(file_path):
+def apd_load_main(file_path, default_power_factor=None):
     # Load data from APD folder into dictionaries
     monitor_dict = {}
     apd_dict = {}
@@ -96,15 +96,38 @@ def apd_load_main(file_path):
             params_text = f.read().strip()
             # Convert the params text to a dictionary, IMPORTANT
             params_dict[key_name] = ast.literal_eval(params_text)
+        
+        # Calculate power and add to params
+        average_power = np.mean(monitor_dict[key_name])
+        try:
+            # Try to get power factor from params
+            power_factor = params_dict[key_name]['Power calibration factor (mW/V)']
+        except:
+            # Use default power factor if not found in params
+            if default_power_factor is not None:
+                power_factor = default_power_factor
+            else:
+                print(f"Power calibration factor not found for {key_name} and no default provided")
+                power_factor = 50  # Fallback value
+        
+        # Calculate power in mW and add to params
+        power_mw = average_power * float(power_factor)
+        params_dict[key_name]['power'] = power_mw
     
     return apd_dict, monitor_dict, params_dict
 
 
-def filter_apd(apd_dict, monitor_dict, params_dict, pattern):
+def filter_apd(apd_dict, monitor_dict, params_dict, pattern, exclude=None):
     # Use fnmatch to filter filenames directly
     filtered_data = {k: v for k, v in apd_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
     filtered_monitor = {k: v for k, v in monitor_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
     filtered_params = {k: v for k, v in params_dict.items() if glob.fnmatch.fnmatch(k, pattern)}
+
+    if exclude:
+    # Exclude files that contain any of the exclude strings
+        filtered_data = {k: v for k, v in filtered_data.items() if not any(excl in k for excl in exclude)}
+        filtered_monitor = {k: v for k, v in filtered_monitor.items() if not any(excl in k for excl in exclude)}
+        filtered_params = {k: v for k, v in filtered_params.items() if not any(excl in k for excl in exclude)}
     
     print(f"Found {len(filtered_data)} files matching '{pattern}'")
     return filtered_data, filtered_monitor, filtered_params
