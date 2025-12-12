@@ -12,6 +12,8 @@ wheels/
 # IDE/Editor files
 .vscode/
 .claude/
+CLAUDE.md
+AGENTS.md
 
 # Data directories
 Data/
