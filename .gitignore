@@ -24,8 +24,6 @@ cache/
 *.npy
 *.pkl
 
-# Archive folder
-archive/
 
 # Generated plots
 plots/
