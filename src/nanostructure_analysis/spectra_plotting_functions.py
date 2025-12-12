@@ -34,6 +34,7 @@ def plot_spectra(
     group_colors=False,
     sem_data=None,
     legend_labels=None,
+    legend_fontsize=None,
 ):
     """Plot spectra data with optional SEM-based group labels.
 
@@ -136,7 +137,8 @@ def plot_spectra(
     if legend_flag:
         # Add legend title if SEM data provided with group colors
         legend_title = "Gap width:" if (sem_data is not None and group_colors) else None
-        legend = plt.legend(loc='best', fontsize=config.DEFAULT_LEGEND_FONTSIZE, frameon=False, title=legend_title)
+        fontsize = legend_fontsize if legend_fontsize is not None else config.DEFAULT_LEGEND_FONTSIZE
+        legend = plt.legend(loc='best', fontsize=fontsize, frameon=False, title=legend_title)
         if legend_title:
             legend.get_title().set_fontsize(config.DEFAULT_LABEL_FONTSIZE)
     plt.tick_params(axis='both', which='major', labelsize=config.DEFAULT_TICK_FONTSIZE, width=1.5, length=6)
