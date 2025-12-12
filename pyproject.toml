@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanostructure-analysis"
+version = "0.1.0"
+description = "Scientific data analysis toolkit for optical characterization of gold nanostructures"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.3.5",
+    "scipy>=1.15.0",
+    "matplotlib>=3.10.0",
+    "pandas>=2.2.0",
+    "scikit-image>=0.24.0",
+    "python-dateutil>=2.8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,39 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE/Editor files
+.vscode/
+.claude/
+
+# Data directories
+Data/
+data/
+cache/
+
+# Large data files
+*.npy
+*.pkl
+
+# Archive folder
+archive/
+
+# Generated plots
+plots/
+
+# Editor temporary files
+*~
+*.swp
+*.swo
+
+# Misc
+SEM_code/
+misc/
+__pycache__/
