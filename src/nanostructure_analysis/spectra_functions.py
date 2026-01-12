@@ -197,12 +197,16 @@ def normalize_spectra_baseline(data_dict, baseline_dict, ref_dict, lam=1e7, p=0.
     return normalized_data
 
 
-def normalize_spectra(data_dict, ref_dict, lam=1e7, p=0.5, normalize_max=True):
-    """Normalize: spectrum / reference, then normalize to max."""
+def normalize_spectra(data_dict, ref_dict, lam=1e7, p=0.5, normalize_max=True, bias_dict=None):
+    """Normalize: (spectrum - bias) / reference, then smooth and optionally normalize to max."""
     ref = next(iter(ref_dict.values()))
+    bias = next(iter(bias_dict.values())) if bias_dict is not None else None
     normalized_data = {}
     for key, data in data_dict.items():
-        y = data[:, 1] / ref[:, 1]
+        y = data[:, 1]
+        if bias is not None:
+            y = y - bias[:, 1]
+        y = y / ref[:, 1]
         y = baseline_als(y, lam, p)
         if normalize_max:
             y = y / np.max(y)

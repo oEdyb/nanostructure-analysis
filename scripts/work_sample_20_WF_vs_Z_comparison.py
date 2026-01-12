@@ -65,26 +65,26 @@ for label in z_filtered.keys():
 # Assign colors to each group
 colors = plt.cm.tab10(range(len(groups)))
 
-# Plot each group
-plt.figure(figsize=(10, 6))
+# Plot each group in separate figures
 for idx, (base, group_data) in enumerate(groups.items()):
+    plt.figure(figsize=(10, 6))
     color = colors[idx]
 
     # Plot other z-positions first (thin, transparent)
     for label in group_data['others']:
         plt.plot(z_filtered[label][:, 0], z_filtered[label][:, 1],
-                color=color, alpha=0.3, linewidth=0.8)
+                color=color, alpha=0.3, linewidth=0.8, label=label)
 
     # Plot z0 on top (thick)
     z0_label = group_data['z0']
     plt.plot(z_filtered[z0_label][:, 0], z_filtered[z0_label][:, 1],
             label=z0_label, color=color, linewidth=2.5)
 
-plt.xlabel("Wavelength (nm)")
-plt.ylabel("Intensity")
-plt.title("Confocal")
-plt.legend(fontsize=10)
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig(f"{output_dir}/confocal.png", dpi=300, bbox_inches='tight')
-plt.show()
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Intensity")
+    plt.title(f"Confocal - {base}")
+    plt.legend(fontsize=10)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/confocal_{base}.png", dpi=300, bbox_inches='tight')
+    plt.show()

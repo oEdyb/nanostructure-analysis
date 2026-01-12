@@ -136,10 +136,10 @@ def plot_spectra(
     if legend_flag:
         # Add legend title if SEM data provided with group colors
         legend_title = "Gap width:" if (sem_data is not None and group_colors) else None
-        legend = plt.legend(loc='best', fontsize=config.DEFAULT_LEGEND_FONTSIZE, frameon=False, title=legend_title)
+        legend = plt.legend(loc='best', fontsize=8, frameon=False, title=legend_title)
         if legend_title:
             legend.get_title().set_fontsize(config.DEFAULT_LABEL_FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=config.DEFAULT_TICK_FONTSIZE, width=1.5, length=6)
+    plt.tick_params(axis='both', which='major', labelsize=8, width=1.5, length=6)
     plt.tight_layout()
 
 def plot_spectra_integrated_histogram(spectra_data, spectra_params, cutoff=950, new_fig=True, bins='auto'):
